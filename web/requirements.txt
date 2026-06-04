@@ -1,0 +1,6 @@
+torch
+torchvision
+pillow
+flask
+pytest
+requests

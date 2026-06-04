@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Image</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="upload-shell">
+    <main class="upload-layout">
+        <section class="upload-header">
+            <div>
+                <p class="eyebrow">Authenticated session</p>
+                <h1>Upload an image for classification.</h1>
+                <p class="hero-copy">
+                    The page sends your selected file to <code>/classifier</code> with the bearer token from session storage.
+                </p>
+            </div>
+            <div class="header-actions">
+                <button id="status-button" class="ghost-button" type="button">Check status</button>
+                <button id="logout-button" class="secondary-button" type="button">Log out</button>
+            </div>
+        </section>
+
+        <div id="upload-feedback" class="feedback" role="status" aria-live="polite"></div>
+
+        <section class="upload-grid">
+            <section class="card">
+                <form id="upload-form" class="upload-form">
+                    <label class="dropzone" for="image-input">
+                        <input id="image-input" type="file" name="image" accept=".png,.jpg,.jpeg,image/png,image/jpeg" required>
+                        <span class="drop-title">Choose a PNG or JPEG image</span>
+                        <span class="drop-copy">Click to browse or replace the current selection.</span>
+                    </label>
+
+                    <div class="preview-wrap">
+                        <img id="image-preview" alt="Selected image preview" hidden>
+                        <p id="file-meta" class="muted-text">No image selected.</p>
+                    </div>
+
+                    <button class="primary-button" type="submit">Run classification</button>
+                </form>
+            </section>
+
+            <section class="card">
+                <div class="results-head">
+                    <h2>Matches</h2>
+                    <p class="muted-text">Top predictions returned by the API.</p>
+                </div>
+                <div id="results-empty" class="empty-state">
+                    Upload an image to view classification results.
+                </div>
+                <ul id="results-list" class="results-list" hidden></ul>
+            </section>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='upload.js') }}" defer></script>
+</body>
+</html>

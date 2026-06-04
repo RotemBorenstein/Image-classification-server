@@ -1,0 +1,14 @@
+services:
+  web:
+    build: ./web
+    ports:
+      - "5000:5000"
+
+  tests:
+    build: ./web
+    depends_on:
+      - web
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: pytest -v tests

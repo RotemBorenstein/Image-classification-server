@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PictureServer Access</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="auth-shell">
+    <main class="auth-layout">
+        <section class="hero-panel">
+            <p class="eyebrow">PictureServer API v1</p>
+            <h1>Classify images through a token-based workspace.</h1>
+            <p class="hero-copy">
+                Create an account, sign in, receive a bearer token, and move straight to image upload.
+            </p>
+            <div class="hero-grid" aria-hidden="true">
+                <div class="metric-card">
+                    <span>Auth model</span>
+                    <strong>Bearer token</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Accepted files</span>
+                    <strong>PNG / JPEG</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Upload flow</span>
+                    <strong>Synchronous</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Client storage</span>
+                    <strong>Session only</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="form-panel">
+            <div class="panel-header">
+                <p class="eyebrow">Account</p>
+                <h2>Login or register</h2>
+            </div>
+
+            <div class="tab-row" role="tablist" aria-label="Authentication forms">
+                <button class="tab-button is-active" type="button" data-tab-target="login-panel" role="tab" aria-selected="true">
+                    Login
+                </button>
+                <button class="tab-button" type="button" data-tab-target="register-panel" role="tab" aria-selected="false">
+                    Register
+                </button>
+            </div>
+
+            <div id="auth-feedback" class="feedback" role="status" aria-live="polite"></div>
+
+            <section id="login-panel" class="tab-panel is-active" role="tabpanel">
+                <form id="login-form" class="auth-form">
+                    <label>
+                        <span>Username</span>
+                        <input type="text" name="username" autocomplete="username" required>
+                    </label>
+                    <label>
+                        <span>Password</span>
+                        <input type="password" name="password" autocomplete="current-password" required>
+                    </label>
+                    <button class="primary-button" type="submit">Sign in</button>
+                </form>
+            </section>
+
+            <section id="register-panel" class="tab-panel" role="tabpanel" hidden>
+                <form id="register-form" class="auth-form">
+                    <label>
+                        <span>Username</span>
+                        <input type="text" name="username" autocomplete="username" required>
+                    </label>
+                    <label>
+                        <span>Password</span>
+                        <input type="password" name="password" autocomplete="new-password" required>
+                    </label>
+                    <button class="secondary-button" type="submit">Create account</button>
+                </form>
+            </section>
+
+            <button id="resume-session" class="ghost-button" type="button" hidden>
+                Continue with existing session
+            </button>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='auth.js') }}" defer></script>
+</body>
+</html>
