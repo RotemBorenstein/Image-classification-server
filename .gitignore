@@ -19,3 +19,4 @@ torch_cache/
 *.log
 tmp/
 temp/
+test_noam.py

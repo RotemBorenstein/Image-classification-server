@@ -40,6 +40,26 @@ def test_login_empty_json_returns_400():
     assert_error_response(response, 400)
 
 
+def test_login_rejects_non_object_json_body():
+    response = request("POST", "/login", json=["alice", "secret"])
+    assert_error_response(response, 400)
+
+
+def test_login_rejects_non_string_password():
+    response = request("POST", "/login", json={"username": "alice", "password": {"value": "secret"}})
+    assert_error_response(response, 400)
+
+
+def test_login_rejects_non_json_content_type():
+    response = request(
+        "POST",
+        "/login",
+        data="username=alice&password=secret",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert_error_response(response, 400)
+
+
 def test_login_malformed_json_returns_400():
     response = request(
         "POST",

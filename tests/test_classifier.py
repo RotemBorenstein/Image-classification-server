@@ -35,6 +35,36 @@ def test_classifier_rejects_unsupported_extension(authenticated_token):
     assert_error_response(response, 400)
 
 
+def test_classifier_rejects_jpg_extension_per_interface(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        files={"image": ("tiny.jpg", io.BytesIO(PNG_1X1), "image/jpeg")},
+    )
+    assert_error_response(response, 400)
+
+
+def test_classifier_rejects_malformed_image_payload(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        files={"image": ("broken.png", io.BytesIO(b"not really a png"), "image/png")},
+    )
+    assert_error_response(response, 400)
+
+
+def test_classifier_rejects_empty_filename(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        files={"image": ("", io.BytesIO(PNG_1X1), "image/png")},
+    )
+    assert_error_response(response, 400)
+
+
 def test_classifier_rejects_malformed_authorization_header(authenticated_token):
     response = request(
         "POST",

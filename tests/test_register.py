@@ -32,6 +32,26 @@ def test_register_empty_json_returns_400():
     assert_error_response(response, 400)
 
 
+def test_register_rejects_non_object_json_body():
+    response = request("POST", "/register", json=["alice", "secret"])
+    assert_error_response(response, 400)
+
+
+def test_register_rejects_non_string_username():
+    response = request("POST", "/register", json={"username": ["alice"], "password": "secret"})
+    assert_error_response(response, 400)
+
+
+def test_register_rejects_non_json_content_type():
+    response = request(
+        "POST",
+        "/register",
+        data="username=alice&password=secret",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert_error_response(response, 400)
+
+
 def test_register_malformed_json_returns_400():
     response = request(
         "POST",

@@ -1,25 +1,69 @@
-from flask import Flask, request, jsonify, render_template
-from werkzeug.exceptions import BadRequest
+import threading
 import time
 
+from flask import Flask, has_request_context, jsonify, render_template, request
+from PIL import Image, UnidentifiedImageError
+from werkzeug.exceptions import BadRequest, UnsupportedMediaType
+
 from auth import (
-    create_user, authenticate_user,
-    create_token, verify_token, invalidate_token
+    authenticate_user,
+    create_token,
+    create_user,
+    invalidate_token,
+    verify_token,
 )
-from model import classify_image
+import model
 
 app = Flask(__name__)
 
-start_time = time.time()
+COUNTED_ENDPOINTS = {"/register", "/login", "/logout", "/classifier"}
+SUPPORTED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg"}
+MALFORMED_IMAGE_EXCEPTIONS = (
+    UnidentifiedImageError,
+    OSError,
+    ValueError,
+    Image.DecompressionBombError,
+)
 
+start_time = time.time()
+stats_lock = threading.Lock()
 stats = {
     "success": 0,
-    "fail": 0
+    "fail": 0,
 }
 
 
 def error_response(status_code, message):
     return jsonify({"error": {"http_status": status_code, "message": message}}), status_code
+
+
+def counted_path(path=None):
+    if path is not None:
+        return path
+    if has_request_context():
+        return request.path
+    return None
+
+
+def record_success(path=None):
+    if counted_path(path) not in COUNTED_ENDPOINTS:
+        return
+
+    with stats_lock:
+        stats["success"] += 1
+
+
+def record_failure(path=None):
+    if counted_path(path) not in COUNTED_ENDPOINTS:
+        return
+
+    with stats_lock:
+        stats["fail"] += 1
+
+
+def snapshot_stats():
+    with stats_lock:
+        return {"success": stats["success"], "fail": stats["fail"]}
 
 
 def get_bearer_token():
@@ -34,7 +78,7 @@ def get_bearer_token():
 def get_json_body():
     try:
         data = request.get_json()
-    except BadRequest:
+    except (BadRequest, UnsupportedMediaType):
         return None, error_response(400, "Malformed JSON")
 
     if not isinstance(data, dict):
@@ -43,8 +87,34 @@ def get_json_body():
     return data, None
 
 
+def parse_credentials(data):
+    if not data or "username" not in data or "password" not in data:
+        return None, error_response(400, "Missing fields")
+
+    username = data["username"]
+    password = data["password"]
+
+    if not isinstance(username, str) or not isinstance(password, str):
+        return None, error_response(400, "Invalid field types")
+
+    if not username or not password:
+        return None, error_response(400, "Missing fields")
+
+    return {"username": username, "password": password}, None
+
+
+def classifier_health_status():
+    try:
+        ready = getattr(model, "can_classify", lambda: True)()
+    except Exception:
+        ready = False
+
+    return "ok" if ready else "error"
+
+
 @app.errorhandler(405)
 def method_not_allowed(_error):
+    record_failure(request.path)
     return error_response(405, "Unsupported method")
 
 
@@ -57,132 +127,139 @@ def auth_page():
 def upload_page():
     return render_template("upload.html")
 
-# ---------------- REGISTER ----------------
+
 @app.route("/register", methods=["POST"])
 def register():
     try:
         data, error = get_json_body()
         if error:
-            stats["fail"] += 1
+            record_failure()
             return error
 
-        if not data or "username" not in data or "password" not in data:
-            stats["fail"] += 1
-            return error_response(400, "Missing fields")
+        credentials, error = parse_credentials(data)
+        if error:
+            record_failure()
+            return error
 
-        ok = create_user(data["username"], data["password"])
+        ok = create_user(credentials["username"], credentials["password"])
         if not ok:
-            stats["fail"] += 1
+            record_failure()
             return error_response(409, "User exists")
 
-        stats["success"] += 1
+        record_success()
         return jsonify({"message": "User registered successfully"}), 201
 
     except Exception:
-        stats["fail"] += 1
+        record_failure()
         return error_response(500, "Internal error")
 
 
-# ---------------- LOGIN ----------------
 @app.route("/login", methods=["POST"])
 def login():
     try:
         data, error = get_json_body()
         if error:
-            stats["fail"] += 1
+            record_failure()
             return error
 
-        if not data or "username" not in data or "password" not in data:
-            stats["fail"] += 1
-            return error_response(400, "Missing fields")
+        credentials, error = parse_credentials(data)
+        if error:
+            record_failure()
+            return error
 
-        if not authenticate_user(data["username"], data["password"]):
-            stats["fail"] += 1
+        if not authenticate_user(credentials["username"], credentials["password"]):
+            record_failure()
             return error_response(401, "Unauthorized")
 
-        token = create_token(data["username"])
-        stats["success"] += 1
-
+        token = create_token(credentials["username"])
+        record_success()
         return jsonify({"token": token}), 200
 
     except Exception:
-        stats["fail"] += 1
+        record_failure()
         return error_response(500, "Internal error")
 
 
-# ---------------- LOGOUT ----------------
 @app.route("/logout", methods=["POST"])
 def logout():
     try:
         token = get_bearer_token()
 
         if not verify_token(token):
-            stats["fail"] += 1
+            record_failure()
             return error_response(401, "Invalid token")
 
         invalidate_token(token)
-        stats["success"] += 1
-
+        record_success()
         return jsonify({"message": "Logged out successfully"}), 200
 
     except Exception:
-        stats["fail"] += 1
+        record_failure()
         return error_response(500, "Internal error")
 
 
-# ---------------- CLASSIFIER ----------------
 @app.route("/classifier", methods=["POST"])
 def classifier():
     try:
         token = get_bearer_token()
 
         if not verify_token(token):
-            stats["fail"] += 1
+            record_failure()
             return error_response(401, "Invalid token")
 
         if "image" not in request.files:
-            stats["fail"] += 1
+            record_failure()
             return error_response(400, "Missing image")
 
         file = request.files["image"]
-
-        if not file.filename.endswith((".png", ".jpeg", ".jpg")):
-            stats["fail"] += 1
+        if not file.filename or not file.filename.lower().endswith((".png", ".jpeg")):
+            record_failure()
             return error_response(400, "Unsupported image format")
 
-        matches = classify_image(file)
+        if file.mimetype not in SUPPORTED_IMAGE_MIME_TYPES:
+            record_failure()
+            return error_response(400, "Unsupported image format")
 
-        stats["success"] += 1
+        try:
+            matches = model.classify_image(file)
+        except MALFORMED_IMAGE_EXCEPTIONS:
+            record_failure()
+            return error_response(400, "Malformed image")
+
+        record_success()
         return jsonify({"matches": matches}), 200
 
+    except RuntimeError as exc:
+        record_failure()
+        message = str(exc).strip() or "Classification failed"
+        return error_response(500, message)
     except Exception:
-        stats["fail"] += 1
-        return error_response(500, "Internal error")
+        record_failure()
+        return error_response(500, "Classification failed")
 
 
-# ---------------- STATUS ----------------
 @app.route("/status", methods=["GET"])
 def status():
     try:
         token = get_bearer_token()
 
         if not verify_token(token):
-            stats["fail"] += 1
             return error_response(401, "Invalid token")
 
         uptime = time.time() - start_time
 
-        return jsonify({
-            "status": {
-                "uptime": uptime,
-                "processed": stats,
-                "health": "ok",
-                "api_version": 1
+        return jsonify(
+            {
+                "status": {
+                    "uptime": uptime,
+                    "processed": snapshot_stats(),
+                    "health": classifier_health_status(),
+                    "api_version": 1,
+                }
             }
-        }), 200
+        ), 200
 
     except Exception:
-        stats["fail"] += 1
         return error_response(500, "Internal error")
 
 
