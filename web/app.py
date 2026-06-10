@@ -1,7 +1,8 @@
+import json
 import threading
 import time
 
-from flask import Flask, has_request_context, jsonify, render_template, request
+from flask import Flask, Response, has_request_context, jsonify, render_template, request
 from PIL import Image, UnidentifiedImageError
 from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 
@@ -15,6 +16,7 @@ from auth import (
 import model
 
 app = Flask(__name__)
+app.json.sort_keys = False
 
 COUNTED_ENDPOINTS = {"/register", "/login", "/logout", "/classifier"}
 SUPPORTED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg"}
@@ -110,6 +112,19 @@ def classifier_health_status():
         ready = False
 
     return "ok" if ready else "error"
+
+
+def format_classifier_matches_response(matches):
+    match_parts = []
+    for match in matches:
+        match_parts.append(
+            '{'
+            f'"name": {json.dumps(match["name"])}, '
+            f'"score": {json.dumps(match["score"])}'
+            '}'
+        )
+
+    return '{ "matches": [ ' + ", ".join(match_parts) + ']}'
 
 
 @app.errorhandler(405)
@@ -227,7 +242,8 @@ def classifier():
             return error_response(400, "Malformed image")
 
         record_success()
-        return jsonify({"matches": matches}), 200
+        body = format_classifier_matches_response(matches)
+        return Response(body, status=200, mimetype="application/json")
 
     except RuntimeError as exc:
         record_failure()

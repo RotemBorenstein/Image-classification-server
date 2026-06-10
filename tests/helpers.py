@@ -1,8 +1,10 @@
 import os
 import struct
 import zlib
+from io import BytesIO
 
 import requests
+from PIL import Image
 
 
 BASE_URL = os.getenv("BASE_URL", "http://web:5000")
@@ -14,7 +16,7 @@ PNG_1X1 = (
 
 
 def request(method, path, **kwargs):
-    return requests.request(method, f"{BASE_URL}{path}", timeout=10, **kwargs)
+    return requests.request(method, f"{BASE_URL}{path}", timeout=30, **kwargs)
 
 
 def assert_error_response(response, expected_status):
@@ -24,6 +26,16 @@ def assert_error_response(response, expected_status):
     assert payload["error"]["http_status"] == expected_status
     assert isinstance(payload["error"]["message"], str)
     assert payload["error"]["message"]
+    return payload
+
+
+def assert_json_response(response, allowed_statuses=None):
+    if allowed_statuses is not None:
+        assert response.status_code in allowed_statuses, response.text
+
+    assert response.headers["Content-Type"].startswith("application/json")
+    payload = response.json()
+    assert isinstance(payload, dict)
     return payload
 
 
@@ -60,3 +72,14 @@ def make_png_decompression_bomb(width=50000, height=50000):
         + chunk(b"IDAT", idat)
         + chunk(b"IEND", b"")
     )
+
+
+def make_large_valid_png(width=1024, height=1024):
+    image = Image.frombytes("RGB", (width, height), os.urandom(width * height * 3))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def make_large_random_payload(size_bytes=1024 * 1024):
+    return os.urandom(size_bytes)

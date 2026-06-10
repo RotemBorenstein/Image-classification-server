@@ -9,9 +9,12 @@ import pytest
 
 from tests.helpers import (
     PNG_1X1,
+    assert_json_response,
     assert_counts_delta,
     assert_error_response,
     get_processed_counts,
+    make_large_random_payload,
+    make_large_valid_png,
     make_png_decompression_bomb,
     request,
 )
@@ -196,3 +199,99 @@ def test_classifier_internal_failure_does_not_leak_non_json_response():
         "error": {"http_status": 500, "message": "boom"}
     }
     assert module.stats == {"success": 0, "fail": 1}
+
+
+def test_classifier_accepts_uppercase_png_extension(authenticated_token):
+    response = _upload(authenticated_token, "PIC.PNG", PNG_1X1, "image/png")
+    payload = assert_json_response(response, {200, 400})
+
+    if response.status_code == 200:
+        assert isinstance(payload["matches"], list)
+        assert payload["matches"]
+    else:
+        assert payload["error"]["http_status"] == 400
+
+
+def test_classifier_handles_extra_form_fields_without_crashing(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        data={"note": "extra", "source": "stress-test"},
+        files={"image": ("tiny.png", io.BytesIO(PNG_1X1), "image/png")},
+    )
+    payload = assert_json_response(response, {200, 400})
+
+    if response.status_code == 200:
+        assert isinstance(payload["matches"], list)
+        assert payload["matches"]
+    else:
+        assert payload["error"]["http_status"] == 400
+
+
+def test_classifier_empty_file_body_returns_controlled_json(authenticated_token):
+    before = get_processed_counts(authenticated_token)
+
+    response = _upload(authenticated_token, "empty.png", b"", "image/png")
+    payload = assert_json_response(response)
+
+    assert response.status_code in {400, 500}
+    assert "error" in payload
+    assert payload["error"]["http_status"] == response.status_code
+
+    after = get_processed_counts(authenticated_token)
+    assert_counts_delta(before, after, success=0, fail=1)
+
+
+def test_classifier_multiple_image_parts_returns_controlled_json(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        files=[
+            ("image", ("first.png", io.BytesIO(PNG_1X1), "image/png")),
+            ("image", ("second.png", io.BytesIO(PNG_1X1), "image/png")),
+        ],
+    )
+    payload = assert_json_response(response, {200, 400, 500})
+
+    if response.status_code == 200:
+        assert isinstance(payload["matches"], list)
+        assert payload["matches"]
+    else:
+        assert payload["error"]["http_status"] == response.status_code
+
+
+def test_classifier_large_malformed_image_returns_controlled_json(authenticated_token):
+    before = get_processed_counts(authenticated_token)
+
+    response = _upload(
+        authenticated_token,
+        "bad.png",
+        make_large_random_payload(1024 * 1024),
+        "image/png",
+    )
+    payload = assert_json_response(response)
+
+    assert response.status_code in {400, 500}
+    assert "error" in payload
+    assert payload["error"]["http_status"] == response.status_code
+
+    after = get_processed_counts(authenticated_token)
+    assert_counts_delta(before, after, success=0, fail=1)
+
+
+def test_classifier_large_valid_image_returns_controlled_json(authenticated_token):
+    response = _upload(
+        authenticated_token,
+        "large.png",
+        make_large_valid_png(),
+        "image/png",
+    )
+    payload = assert_json_response(response, {200, 400, 500})
+
+    if response.status_code == 200:
+        assert isinstance(payload["matches"], list)
+        assert payload["matches"]
+    else:
+        assert payload["error"]["http_status"] == response.status_code

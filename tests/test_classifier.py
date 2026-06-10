@@ -114,3 +114,18 @@ def test_classifier_success_returns_matches(authenticated_token):
         total_score += match["score"]
 
     assert 0.0 < total_score <= 1.0
+
+
+def test_classifier_success_uses_exact_matches_spacing(authenticated_token):
+    response = request(
+        "POST",
+        "/classifier",
+        headers={"Authorization": f"Bearer {authenticated_token}"},
+        files={"image": ("tiny.png", io.BytesIO(PNG_1X1), "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.text.startswith('{ "matches": [ ')
+    assert response.text.endswith(']}')
+    assert '{"name": ' in response.text
+    assert ', "score": ' in response.text
