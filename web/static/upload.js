@@ -141,8 +141,13 @@ async function handleStatusCheck() {
         }
 
         const status = data.status;
+        const uptimeSeconds = Number(status.uptime);
+        const uptimeText = Number.isFinite(uptimeSeconds)
+            ? uptimeSeconds.toFixed(1)
+            : String(status.uptime);
+
         setFeedback(
-            `Server health: ${status.health}. Success: ${status.processed.success}, Fail: ${status.processed.fail}.`,
+            `Server health: ${status.health}. Uptime: ${uptimeText}s. Success: ${status.processed.success}, Fail: ${status.processed.fail}. API version: ${status.api_version}.`,
             "success"
         );
     } catch (error) {
